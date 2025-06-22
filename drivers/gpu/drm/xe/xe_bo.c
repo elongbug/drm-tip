@@ -1559,6 +1559,52 @@ static bool xe_ttm_bo_lock_in_destructor(struct ttm_buffer_object *ttm_bo)
 	return locked;
 }
 
+static void xe_ttm_bo_release_clear(struct ttm_buffer_object *ttm_bo)
+{
+	struct xe_device *xe = ttm_to_xe_device(ttm_bo->bdev);
+	struct xe_bo *bo = ttm_to_xe_bo(ttm_bo);
+	struct dma_fence *fence;
+	int err, idx;
+
+	xe_bo_assert_held(ttm_to_xe_bo(ttm_bo));
+
+	if (ttm_bo->type != ttm_bo_type_device)
+		return;
+
+	if (xe_device_wedged(xe))
+		return;
+
+	if (!ttm_bo->resource || !mem_type_is_vram(ttm_bo->resource->mem_type))
+		return;
+
+	if (!drm_dev_enter(&xe->drm, &idx))
+		return;
+
+	if (!xe_pm_runtime_get_if_active(xe))
+		goto unbind;
+
+	err = dma_resv_reserve_fences(&ttm_bo->base._resv, 1);
+	if (err)
+		goto put_pm;
+
+	fence = xe_migrate_clear(mem_type_to_migrate(xe, ttm_bo->resource->mem_type),
+				 ttm_bo->resource, &ttm_bo->base._resv, NULL,
+				 xe_bo_size(bo), XE_MIGRATE_CLEAR_FLAG_FULL |
+				 XE_MIGRATE_CLEAR_FLAG_ON_FREE, &bo->ccs_cleared);
+	if (XE_WARN_ON(IS_ERR(fence)))
+		goto put_pm;
+
+	xe_ttm_vram_mgr_resource_set_cleared(ttm_bo->resource);
+	dma_resv_add_fence(&ttm_bo->base._resv, fence,
+			   DMA_RESV_USAGE_KERNEL);
+	dma_fence_put(fence);
+
+put_pm:
+	xe_pm_runtime_put(xe);
+unbind:
+	drm_dev_exit(idx);
+}
+
 static void xe_ttm_bo_release_notify(struct ttm_buffer_object *ttm_bo)
 {
 	struct dma_resv_iter cursor;
@@ -1595,6 +1641,8 @@ static void xe_ttm_bo_release_notify(struct ttm_buffer_object *ttm_bo)
 		}
 	}
 	dma_fence_put(replacement);
+
+	xe_ttm_bo_release_clear(ttm_bo);
 
 	dma_resv_unlock(&ttm_bo->base._resv);
 }

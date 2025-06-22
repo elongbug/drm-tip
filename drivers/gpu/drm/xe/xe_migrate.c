@@ -1670,7 +1670,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 	struct xe_gt *gt = m->tile->primary_gt;
 	struct xe_device *xe = gt_to_xe(gt);
 	bool clear_only_system_ccs = false;
-	struct dma_fence *fence = NULL;
+	struct dma_fence *fence = dma_fence_get_stub();
 	struct xe_res_cursor src_it;
 	struct ttm_resource *src = dst;
 	int err;
@@ -1681,10 +1681,13 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 	if (!clear_bo_data && clear_ccs && !IS_DGFX(xe))
 		clear_only_system_ccs = true;
 
-	if (!clear_vram)
+	if (!clear_vram) {
 		xe_res_first_sg(sgt, 0, size, &src_it);
-	else
+	} else {
 		xe_res_first(src, 0, size, &src_it);
+		if (!(clear_flags & XE_MIGRATE_CLEAR_FLAG_ON_FREE))
+			size -= xe_res_next_dirty(&src_it);
+	}
 
 	while (size) {
 		u64 clear_L0_ofs;
@@ -1733,6 +1736,9 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 			flush_flags |= MI_INVALIDATE_TLB;
 		}
 
+		if (clear_vram && !(clear_flags & XE_MIGRATE_CLEAR_FLAG_ON_FREE))
+			size -= xe_res_next_dirty(&src_it);
+
 		bb->cs[bb->len++] = MI_BATCH_BUFFER_END;
 		update_idx = bb->len;
 
@@ -1754,15 +1760,22 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 		}
 
 		xe_sched_job_add_migrate_flush(job, flush_flags);
-		if (!fence) {
+		if (fence == dma_fence_get_stub()) {
+			enum dma_resv_usage usage =
+			       (clear_flags & XE_MIGRATE_CLEAR_FLAG_ON_FREE) ?
+			       DMA_RESV_USAGE_BOOKKEEP : DMA_RESV_USAGE_KERNEL;
+
 			/*
-			 * There can't be anything userspace related at this
-			 * point, so we just need to respect any potential move
-			 * fences, which are always tracked as
+			 * For initial clears, there can't be anything userspace
+			 * related at this point, so we just need to respect any
+			 * potential move fences, which are always tracked as
 			 * DMA_RESV_USAGE_KERNEL.
+			 *
+			 * For clear on free need to respect all fences as
+			 * memory could still be in use by the GPU which is
+			 * tracked in DMA_RESV_USAGE_BOOKKEEP.
 			 */
-			err = xe_sched_job_add_deps(job, resv,
-						    DMA_RESV_USAGE_KERNEL);
+			err = xe_sched_job_add_deps(job, resv, usage);
 			if (err)
 				goto err_job;
 		}

@@ -88,6 +88,10 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 	if (place->fpfn || lpfn != man->size >> PAGE_SHIFT)
 		vres->flags |= GPU_BUDDY_RANGE_ALLOCATION;
 
+	if (tbo->type == ttm_bo_type_device &&
+	    !xe_bo_tt_has_data(ttm_to_xe_bo(tbo)))
+		vres->flags |= GPU_BUDDY_CLEAR_ALLOCATION;
+
 	if (WARN_ON(!vres->base.size)) {
 		err = -EINVAL;
 		goto error_fini;
@@ -178,7 +182,7 @@ static void xe_ttm_vram_mgr_del(struct ttm_resource_manager *man,
 	struct gpu_buddy *mm = &mgr->mm;
 
 	mutex_lock(&mgr->lock);
-	gpu_buddy_free_list(mm, &vres->blocks, 0);
+	gpu_buddy_free_list(mm, &vres->blocks, vres->flags);
 	mgr->visible_avail += vres->used_visible_size;
 	mutex_unlock(&mgr->lock);
 

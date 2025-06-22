@@ -316,6 +316,32 @@ static inline void xe_res_next(struct xe_res_cursor *cur, u64 size)
 }
 
 /**
+ * xe_res_next_dirty - advance the cursor to next dirty buddy block
+ *
+ * @cur: the cursor to advance
+ *
+ * Move the cursor until dirty buddy block is found.
+ *
+ * Return: Number of bytes cursor has been advanced
+ */
+static inline u64 xe_res_next_dirty(struct xe_res_cursor *cur)
+{
+	struct gpu_buddy_block *block = cur->node;
+	u64 bytes = 0;
+
+	XE_WARN_ON(cur->mem_type != XE_PL_VRAM0 &&
+		   cur->mem_type != XE_PL_VRAM1);
+
+	while (cur->remaining && gpu_buddy_block_is_clear(block)) {
+		bytes += cur->size;
+		xe_res_next(cur, cur->size);
+		block = cur->node;
+	}
+
+	return bytes;
+}
+
+/**
  * xe_res_dma - return dma address of cursor at current position
  *
  * @cur: the cursor to return the dma address from

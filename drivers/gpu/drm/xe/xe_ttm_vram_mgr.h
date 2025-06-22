@@ -37,6 +37,12 @@ to_xe_ttm_vram_mgr_resource(struct ttm_resource *res)
 	return container_of(res, struct xe_ttm_vram_mgr_resource, base);
 }
 
+static inline void
+xe_ttm_vram_mgr_resource_set_cleared(struct ttm_resource *res)
+{
+	to_xe_ttm_vram_mgr_resource(res)->flags |= GPU_BUDDY_CLEARED;
+}
+
 static inline struct xe_ttm_vram_mgr *
 to_xe_ttm_vram_mgr(struct ttm_resource_manager *man)
 {
