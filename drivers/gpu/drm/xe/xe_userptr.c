@@ -311,7 +311,7 @@ int xe_userptr_setup(struct xe_userptr_vma *uvma, unsigned long start,
 	return 0;
 }
 
-void xe_userptr_remove(struct xe_userptr_vma *uvma)
+static void xe_userptr_remove(struct xe_userptr_vma *uvma)
 {
 	struct xe_vm *vm = xe_vma_vm(&uvma->vma);
 	struct xe_userptr *userptr = &uvma->userptr;
@@ -325,14 +325,50 @@ void xe_userptr_remove(struct xe_userptr_vma *uvma)
 	 * them anymore
 	 */
 	mmu_interval_notifier_remove(&userptr->notifier);
+
+	xe_vma_free(&uvma->vma);
 }
 
-void xe_userptr_destroy(struct xe_userptr_vma *uvma)
+static void xe_userptr_destroy_work_func(struct work_struct *w)
+{
+	struct xe_userptr *userptr =
+		container_of(w, typeof(*userptr), destroy_work);
+	struct xe_userptr_vma *uvma = container_of(userptr, typeof(*uvma),
+						   userptr);
+
+	xe_userptr_remove(uvma);
+}
+
+static void xe_userptr_destroy_cb(struct dma_fence *fence,
+				  struct dma_fence_cb *cb)
+{
+	struct xe_userptr *userptr =
+		container_of(cb, typeof(*userptr), destroy_cb);
+
+	INIT_WORK(&userptr->destroy_work, xe_userptr_destroy_work_func);
+	queue_work(system_dfl_wq, &userptr->destroy_work);
+}
+
+void xe_userptr_destroy(struct xe_userptr_vma *uvma, struct dma_fence *fence)
 {
 	struct xe_vm *vm = xe_vma_vm(&uvma->vma);
+	struct xe_userptr *userptr = &uvma->userptr;
 
 	spin_lock(&vm->userptr.invalidated_lock);
 	xe_assert(vm->xe, list_empty(&uvma->userptr.repin_link));
 	list_del(&uvma->userptr.invalidate_link);
 	spin_unlock(&vm->userptr.invalidated_lock);
+
+	xe_vm_assert_held(vm);
+	if (fence) {
+		int ret = dma_fence_add_callback(fence, &userptr->destroy_cb,
+						 xe_userptr_destroy_cb);
+
+		if (ret) {
+			XE_WARN_ON(ret != -ENOENT);
+			xe_userptr_remove(uvma);
+		}
+	} else {
+		xe_userptr_remove(uvma);
+	}
 }

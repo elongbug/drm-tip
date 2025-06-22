@@ -112,13 +112,6 @@ struct xe_vma {
 		struct list_head destroy;
 	} combined_links;
 
-	union {
-		/** @destroy_cb: callback to destroy VMA when unbind job is done */
-		struct dma_fence_cb destroy_cb;
-		/** @destroy_work: worker to destroy this BO */
-		struct work_struct destroy_work;
-	};
-
 	/**
 	 * @fault_lock: Synchronizes fault processing. Locking order: inside
 	 * vm->lock, outside dma-resv.

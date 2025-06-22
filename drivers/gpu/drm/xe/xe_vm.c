@@ -969,7 +969,11 @@ static void xe_vma_mem_attr_fini(struct xe_vma_mem_attr *attr)
 	drm_pagemap_put(attr->preferred_loc.dpagemap);
 }
 
-static void xe_vma_free(struct xe_vma *vma)
+/**
+ * xe_vma_free() - free a VMA
+ * @vma: VMA to free
+ */
+void xe_vma_free(struct xe_vma *vma)
 {
 	xe_vma_mem_attr_fini(&vma->attr);
 
@@ -1085,47 +1089,6 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
 	return vma;
 }
 
-static void xe_vma_destroy_late(struct xe_vma *vma)
-{
-	struct xe_vm *vm = xe_vma_vm(vma);
-
-	if (vma->ufence) {
-		xe_sync_ufence_put(vma->ufence);
-		vma->ufence = NULL;
-	}
-
-	if (xe_vma_is_userptr(vma)) {
-		struct xe_userptr_vma *uvma = to_userptr_vma(vma);
-
-		xe_userptr_remove(uvma);
-		xe_vm_put(vm);
-	} else if (xe_vma_is_null(vma) || xe_vma_is_cpu_addr_mirror(vma)) {
-		xe_vm_put(vm);
-	} else {
-		xe_bo_put(xe_vma_bo(vma));
-	}
-
-	mutex_destroy(&vma->fault_lock);
-	xe_vma_free(vma);
-}
-
-static void vma_destroy_work_func(struct work_struct *w)
-{
-	struct xe_vma *vma =
-		container_of(w, struct xe_vma, destroy_work);
-
-	xe_vma_destroy_late(vma);
-}
-
-static void vma_destroy_cb(struct dma_fence *fence,
-			   struct dma_fence_cb *cb)
-{
-	struct xe_vma *vma = container_of(cb, struct xe_vma, destroy_cb);
-
-	INIT_WORK(&vma->destroy_work, vma_destroy_work_func);
-	queue_work(system_dfl_wq, &vma->destroy_work);
-}
-
 static void xe_vm_assert_write_mode_or_garbage_collector(struct xe_vm *vm)
 {
 	lockdep_assert(lockdep_is_held_type(&vm->lock, 0) ||
@@ -1140,26 +1103,25 @@ static void xe_vma_destroy(struct xe_vma *vma, struct dma_fence *fence)
 	xe_vm_assert_write_mode_or_garbage_collector(vm);
 	xe_assert(vm->xe, list_empty(&vma->combined_links.destroy));
 
+	mutex_destroy(&vma->fault_lock);
+
+	if (vma->ufence) {
+		xe_sync_ufence_put(vma->ufence);
+		vma->ufence = NULL;
+	}
+
 	if (xe_vma_is_userptr(vma)) {
 		xe_assert(vm->xe, vma->gpuva.flags & XE_VMA_DESTROYED);
-		xe_userptr_destroy(to_userptr_vma(vma));
+		xe_userptr_destroy(to_userptr_vma(vma), fence);
 	} else if (!xe_vma_is_null(vma) && !xe_vma_is_cpu_addr_mirror(vma)) {
 		xe_bo_assert_held(xe_vma_bo(vma));
 
 		drm_gpuva_unlink(&vma->gpuva);
-	}
-
-	xe_vm_assert_held(vm);
-	if (fence) {
-		int ret = dma_fence_add_callback(fence, &vma->destroy_cb,
-						 vma_destroy_cb);
-
-		if (ret) {
-			XE_WARN_ON(ret != -ENOENT);
-			xe_vma_destroy_late(vma);
-		}
+		xe_bo_put(xe_vma_bo(vma));
+		xe_vma_free(vma);
 	} else {
-		xe_vma_destroy_late(vma);
+		xe_vm_put(vm);
+		xe_vma_free(vma);
 	}
 }
 

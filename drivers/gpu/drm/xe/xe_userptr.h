@@ -6,6 +6,7 @@
 #ifndef _XE_USERPTR_H_
 #define _XE_USERPTR_H_
 
+#include <linux/dma-fence.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
@@ -57,6 +58,13 @@ struct xe_userptr {
 	 */
 	struct mmu_interval_notifier notifier;
 
+	union {
+		/** @destroy_cb: callback to destroy usertpr when unbind job is done */
+		struct dma_fence_cb destroy_cb;
+		/** @destroy_work: worker to destroy this usertpr */
+		struct work_struct destroy_work;
+	};
+
 	/**
 	 * @initial_bind: user pointer has been bound at least once.
 	 * write: vm->svm.gpusvm.notifier_lock in read mode and vm->resv held.
@@ -69,10 +77,9 @@ struct xe_userptr {
 };
 
 #if IS_ENABLED(CONFIG_DRM_GPUSVM)
-void xe_userptr_remove(struct xe_userptr_vma *uvma);
 int xe_userptr_setup(struct xe_userptr_vma *uvma, unsigned long start,
 		     unsigned long range);
-void xe_userptr_destroy(struct xe_userptr_vma *uvma);
+void xe_userptr_destroy(struct xe_userptr_vma *uvma, struct dma_fence *fence);
 
 int xe_vm_userptr_pin(struct xe_vm *vm);
 int __xe_vm_userptr_needs_repin(struct xe_vm *vm);
@@ -80,15 +87,14 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm);
 int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
 int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma);
 #else
-static inline void xe_userptr_remove(struct xe_userptr_vma *uvma) {}
-
 static inline int xe_userptr_setup(struct xe_userptr_vma *uvma,
 				   unsigned long start, unsigned long range)
 {
 	return -ENODEV;
 }
 
-static inline void xe_userptr_destroy(struct xe_userptr_vma *uvma) {}
+static inline void xe_userptr_destroy(struct xe_userptr_vma *uvma,
+				      struct dma_fence *fence) {}
 
 static inline int xe_vm_userptr_pin(struct xe_vm *vm) { return 0; }
 static inline int __xe_vm_userptr_needs_repin(struct xe_vm *vm) { return 0; }
