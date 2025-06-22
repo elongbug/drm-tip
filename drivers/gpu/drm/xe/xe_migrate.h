@@ -9,8 +9,10 @@
 #include <linux/types.h>
 
 struct dma_fence;
+struct dma_resv;
 struct drm_pagemap_addr;
 struct iosys_map;
+struct sg_table;
 struct ttm_resource;
 
 struct xe_bo;
@@ -77,9 +79,11 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
 #define XE_MIGRATE_CLEAR_FLAG_FULL	(XE_MIGRATE_CLEAR_FLAG_BO_DATA | \
 					XE_MIGRATE_CLEAR_FLAG_CCS_DATA)
 struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
-				   struct xe_bo *bo,
 				   struct ttm_resource *dst,
-				   u32 clear_flags);
+				   struct dma_resv *resv,
+				   struct sg_table *sgt,
+				   u64 size, u32 clear_flags,
+				   bool *ccs_cleared);
 
 struct xe_vm *xe_migrate_get_vm(struct xe_migrate *m);
 

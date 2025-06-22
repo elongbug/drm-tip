@@ -1642,23 +1642,27 @@ static void emit_clear(struct xe_gt *gt, struct xe_bb *bb, u64 src_ofs,
 /**
  * xe_migrate_clear() - Copy content of TTM resources.
  * @m: The migration context.
- * @bo: The buffer object @dst is currently bound to.
  * @dst: The dst TTM resource to be cleared.
+ * @resv: dma-resv for the TTM resource to be cleared
+ * @sgt: Scatter gather table if @dst is not in VRAM, NULL otherwise
+ * @size: Size of the TTM resource to be cleared.
  * @clear_flags: flags to specify which data to clear: CCS, BO, or both.
+ * @ccs_cleared: CCS has been cleared, passed by reference, set in this function
  *
  * Clear the contents of @dst to zero when XE_MIGRATE_CLEAR_FLAG_BO_DATA is set.
  * On flat CCS devices, the CCS metadata is cleared to zero with XE_MIGRATE_CLEAR_FLAG_CCS_DATA.
  * Set XE_MIGRATE_CLEAR_FLAG_FULL to clear bo as well as CCS metadata.
- * TODO: Eliminate the @bo argument.
  *
  * Return: Pointer to a dma_fence representing the last clear batch, or
  * an error pointer on failure. If there is a failure, any clear operation
  * started by the function call has been synced.
  */
 struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
-				   struct xe_bo *bo,
 				   struct ttm_resource *dst,
-				   u32 clear_flags)
+				   struct dma_resv *resv,
+				   struct sg_table *sgt,
+				   u64 size, u32 clear_flags,
+				   bool *ccs_cleared)
 {
 	bool clear_vram = mem_type_is_vram(dst->mem_type);
 	bool clear_bo_data = XE_MIGRATE_CLEAR_FLAG_BO_DATA & clear_flags;
@@ -1667,7 +1671,6 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 	struct xe_device *xe = gt_to_xe(gt);
 	bool clear_only_system_ccs = false;
 	struct dma_fence *fence = NULL;
-	u64 size = xe_bo_size(bo);
 	struct xe_res_cursor src_it;
 	struct ttm_resource *src = dst;
 	int err;
@@ -1679,9 +1682,9 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 		clear_only_system_ccs = true;
 
 	if (!clear_vram)
-		xe_res_first_sg(xe_bo_sg(bo), 0, xe_bo_size(bo), &src_it);
+		xe_res_first_sg(sgt, 0, size, &src_it);
 	else
-		xe_res_first(src, 0, xe_bo_size(bo), &src_it);
+		xe_res_first(src, 0, size, &src_it);
 
 	while (size) {
 		u64 clear_L0_ofs;
@@ -1758,7 +1761,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 			 * fences, which are always tracked as
 			 * DMA_RESV_USAGE_KERNEL.
 			 */
-			err = xe_sched_job_add_deps(job, bo->ttm.base.resv,
+			err = xe_sched_job_add_deps(job, resv,
 						    DMA_RESV_USAGE_KERNEL);
 			if (err)
 				goto err_job;
@@ -1794,7 +1797,7 @@ err_sync:
 	}
 
 	if (clear_ccs)
-		bo->ccs_cleared = true;
+		*ccs_cleared = true;
 
 	return fence;
 }

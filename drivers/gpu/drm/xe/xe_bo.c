@@ -977,6 +977,8 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	}
 
 	if (move_lacks_source) {
+		struct sg_table *sgt = mem_type_is_vram(new_mem->mem_type) ?
+			NULL : xe_bo_sg(bo);
 		u32 flags = 0;
 
 		if (mem_type_is_vram(new_mem->mem_type))
@@ -984,7 +986,9 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		else if (handle_system_ccs)
 			flags |= XE_MIGRATE_CLEAR_FLAG_CCS_DATA;
 
-		fence = xe_migrate_clear(migrate, bo, new_mem, flags);
+		fence = xe_migrate_clear(migrate, new_mem, ttm_bo->base.resv,
+					 sgt, xe_bo_size(bo), flags,
+					 &bo->ccs_cleared);
 	} else {
 		fence = xe_migrate_copy(migrate, bo, bo, old_mem, new_mem,
 					handle_system_ccs);
