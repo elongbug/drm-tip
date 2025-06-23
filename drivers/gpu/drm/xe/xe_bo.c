@@ -835,6 +835,24 @@ static int xe_bo_move_notify(struct xe_bo *bo,
 	return 0;
 }
 
+/**
+ * xe_bo_tt_has_data() - Xe BO has TT data (i.e., Xe BO has SRAM or swap backing
+ * store)
+ *
+ * Helper to determine if a BO has TT data. Useful to determine if copies or
+ * clears are needed on BO when it is moving.
+ *
+ * Return: True if a BO has TT data, False otherwise
+ */
+bool xe_bo_tt_has_data(struct xe_bo *bo)
+{
+	struct ttm_tt *ttm = bo->ttm.ttm;
+
+	xe_bo_assert_held(bo);
+
+	return ttm && (ttm_tt_is_populated(ttm) || ttm_tt_is_swapped(ttm));
+}
+
 static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		      struct ttm_operation_ctx *ctx,
 		      struct ttm_resource *new_mem,
@@ -871,8 +889,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		return ret;
 	}
 
-	tt_has_data = ttm && (ttm_tt_is_populated(ttm) || ttm_tt_is_swapped(ttm));
-
+	tt_has_data = xe_bo_tt_has_data(bo);
 	move_lacks_source = !old_mem || (handle_system_ccs ? (!bo->ccs_cleared) :
 					 (!mem_type_is_vram(old_mem_type) && !tt_has_data));
 
