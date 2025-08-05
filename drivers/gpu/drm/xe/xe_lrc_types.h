@@ -12,6 +12,10 @@
 
 struct xe_bo;
 
+#define LRC_MIGRATION_ULLS_SEMAPORE_COUNT	64	/* Must be pow2 */
+#define LRC_MIGRATION_ULLS_SEMAPORE_CLEAR	0
+#define LRC_MIGRATION_ULLS_SEMAPORE_SINGAL	1
+
 /**
  * struct xe_lrc - Logical ring context (LRC) and submission ring object
  */
