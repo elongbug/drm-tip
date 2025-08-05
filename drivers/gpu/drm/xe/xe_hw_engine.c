@@ -304,6 +304,16 @@ void xe_hw_engine_mmio_write32(struct xe_hw_engine *hwe,
 }
 
 /**
+ * xe_hw_engine_write_ring_tail() - Write ring tail
+ * @hwe: engine
+ * @val: desired 32-bit value to write
+ */
+void xe_hw_engine_write_ring_tail(struct xe_hw_engine *hwe, u32 val)
+{
+	xe_hw_engine_mmio_write32(hwe, RING_TAIL(0), val);
+}
+
+/**
  * xe_hw_engine_mmio_read32() - Read engine register
  * @hwe: engine
  * @reg: register to read from
