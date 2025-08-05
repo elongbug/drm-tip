@@ -177,6 +177,8 @@ static inline void xe_migrate_job_lock_assert(struct xe_exec_queue *q)
 }
 #endif
 
+void xe_migrate_ulls_enter(struct xe_migrate *m);
+
 void xe_migrate_job_lock(struct xe_migrate *m, struct xe_exec_queue *q);
 void xe_migrate_job_unlock(struct xe_migrate *m, struct xe_exec_queue *q);
 

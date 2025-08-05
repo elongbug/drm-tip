@@ -1308,7 +1308,7 @@ static int xe_pt_vm_dependencies(struct xe_sched_job *job,
 	if (!job && !no_in_syncs(vops->syncs, vops->num_syncs))
 		return -ETIME;
 
-	if (!job && !xe_exec_queue_is_idle(pt_update_ops->q))
+	if (!job && !xe_exec_queue_is_idle(pt_update_ops->q, 0))
 		return -ETIME;
 
 	if (pt_update_ops->wait_vm_bookkeep || pt_update_ops->wait_vm_kernel) {
