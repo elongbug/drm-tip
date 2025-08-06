@@ -527,6 +527,7 @@ struct xe_vma_ops {
 #define XE_VMA_OPS_FLAG_NEEDS_SVM_LOCK		BIT(8)
 #define XE_VMA_OPS_FLAG_MODIFIES_GPUVA		BIT(9)
 #define XE_VMA_OPS_FLAG_DOWNGRADE_LOCK		BIT(10)
+#define XE_VMA_OPS_FLAG_HAS_SVM_VALID_RANGE	BIT(11)
 	u32 flags;
 #ifdef TEST_VM_OPS_ERROR
 	/** @inject_error: inject error to test error handling */

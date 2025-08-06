@@ -176,7 +176,17 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 
 	xe_migrate_ulls_enter(gt_to_tile(gt)->migrate);
 
-	down_read(&vm->lock);
+	/*
+	 * We can't block threaded prefetches from completing. down_read() can
+	 * block on a pending down_write(), so without a trylock here, we could
+	 * deadlock, since the page fault workqueue is shared with prefetches,
+	 * prefetches flush work items onto the same workqueue, and a
+	 * down_write() could be pending.
+	 */
+	if (!down_read_trylock(&vm->lock)) {
+		err = -EAGAIN;
+		goto put_vm;
+	}
 
 	if (xe_vm_is_closed(vm)) {
 		err = -ENOENT;
@@ -201,9 +211,21 @@ unlock_vm:
 	if (!err)
 		vm->usm.last_fault_vma = vma;
 	up_read(&vm->lock);
+put_vm:
 	xe_vm_put(vm);
 
 	return err;
+}
+
+static void xe_pagefault_queue_retry(struct xe_pagefault_queue *pf_queue,
+				     struct xe_pagefault *pf)
+{
+	spin_lock_irq(&pf_queue->lock);
+	if (!pf_queue->tail)
+		pf_queue->tail = pf_queue->size - xe_pagefault_entry_size();
+	else
+		pf_queue->tail -= xe_pagefault_entry_size();
+	spin_unlock_irq(&pf_queue->lock);
 }
 
 static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
@@ -260,7 +282,11 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 			continue;
 
 		err = xe_pagefault_service(&pf);
-		if (err) {
+		if (err == -EAGAIN) {
+			xe_pagefault_queue_retry(pf_queue, &pf);
+			queue_work(gt_to_xe(pf.gt)->usm.pf_wq, w);
+			break;
+		} else if (err) {
 			xe_pagefault_print(&pf);
 			xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
 				   ERR_PTR(err));
