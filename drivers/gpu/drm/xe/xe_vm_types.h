@@ -525,6 +525,8 @@ struct xe_vma_ops {
 #define XE_VMA_OPS_FLAG_WAIT_VM_KERNEL		BIT(6)
 #define XE_VMA_OPS_FLAG_NEEDS_INVALIDATION	BIT(7)
 #define XE_VMA_OPS_FLAG_NEEDS_SVM_LOCK		BIT(8)
+#define XE_VMA_OPS_FLAG_MODIFIES_GPUVA		BIT(9)
+#define XE_VMA_OPS_FLAG_DOWNGRADE_LOCK		BIT(10)
 	u32 flags;
 #ifdef TEST_VM_OPS_ERROR
 	/** @inject_error: inject error to test error handling */
