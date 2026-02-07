@@ -126,27 +126,18 @@ struct xe_exec_queue {
 #define EXEC_QUEUE_FLAG_PERMANENT		BIT(1)
 /* for VM jobs. Caller needs to hold rpm ref when creating queue with this flag */
 #define EXEC_QUEUE_FLAG_VM			BIT(2)
-/* child of VM queue for multi-tile VM jobs */
-#define EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD	BIT(3)
 /* kernel exec_queue only, set priority to highest level */
-#define EXEC_QUEUE_FLAG_HIGH_PRIORITY		BIT(4)
+#define EXEC_QUEUE_FLAG_HIGH_PRIORITY		BIT(3)
 /* flag to indicate low latency hint to guc */
-#define EXEC_QUEUE_FLAG_LOW_LATENCY		BIT(5)
+#define EXEC_QUEUE_FLAG_LOW_LATENCY		BIT(4)
 /* for migration (kernel copy, clear, bind) jobs */
-#define EXEC_QUEUE_FLAG_MIGRATE			BIT(6)
+#define EXEC_QUEUE_FLAG_MIGRATE			BIT(5)
 
 	/**
 	 * @flags: flags for this exec queue, should statically setup aside from ban
 	 * bit
 	 */
 	unsigned long flags;
-
-	union {
-		/** @multi_gt_list: list head for VM bind engines if multi-GT */
-		struct list_head multi_gt_list;
-		/** @multi_gt_link: link for VM bind engines if multi-GT */
-		struct list_head multi_gt_link;
-	};
 
 	union {
 		/** @execlist: execlist backend specific state for exec queue */
@@ -202,7 +193,8 @@ struct xe_exec_queue {
 
 #define XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT	0
 #define XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT	1
-#define XE_EXEC_QUEUE_TLB_INVAL_COUNT		(XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT  + 1)
+#define XE_EXEC_QUEUE_TLB_INVAL_COUNT	\
+	((XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT + 1) * 2)
 
 	/** @tlb_inval: TLB invalidations exec queue state */
 	struct {
@@ -213,7 +205,8 @@ struct xe_exec_queue {
 		struct xe_dep_scheduler *dep_scheduler;
 		/**
 		 * @last_fence: last fence for tlb invalidation, protected by
-		 * vm->lock in write mode
+		 * vm->lock in write mode to user queues, protected by
+		 * tile->m->lock for migration queues
 		 */
 		struct dma_fence *last_fence;
 	} tlb_inval[XE_EXEC_QUEUE_TLB_INVAL_COUNT];
