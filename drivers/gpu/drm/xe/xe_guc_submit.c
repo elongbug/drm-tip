@@ -36,8 +36,10 @@
 #include "xe_lrc.h"
 #include "xe_macros.h"
 #include "xe_map.h"
+#include "xe_migrate.h"
 #include "xe_mocs.h"
 #include "xe_pm.h"
+#include "xe_pt.h"
 #include "xe_ring_ops_types.h"
 #include "xe_sched_job.h"
 #include "xe_sleep.h"
@@ -1183,6 +1185,20 @@ static void submit_exec_queue(struct xe_exec_queue *q, struct xe_sched_job *job)
 	}
 }
 
+static bool is_pt_job(struct xe_sched_job *job)
+{
+	return job->is_pt_job;
+}
+
+static void run_pt_job(struct xe_sched_job *job)
+{
+	xe_migrate_update_pgtables_cpu_execute(job->pt_update[0].vm,
+					       job->pt_update[0].tile,
+					       job->pt_update[0].ops,
+					       job->pt_update[0].pt_job_ops->ops,
+					       job->pt_update[0].pt_job_ops->current_op);
+}
+
 static struct dma_fence *
 guc_exec_queue_run_job(struct drm_sched_job *drm_job)
 {
@@ -1210,12 +1226,23 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
 				register_exec_queue(primary, GUC_CONTEXT_NORMAL);
 		}
 
-		if (!exec_queue_registered(q))
-			register_exec_queue(q, GUC_CONTEXT_NORMAL);
-		if (!job->restore_replay)
-			q->ring_ops->emit_job(job);
-		submit_exec_queue(q, job);
+		if (is_pt_job(job)) {
+			xe_gt_assert(guc_to_gt(guc), !exec_queue_registered(q));
+			run_pt_job(job);
+		} else {
+			if (!exec_queue_registered(q))
+				register_exec_queue(q, GUC_CONTEXT_NORMAL);
+			if (!job->restore_replay)
+				q->ring_ops->emit_job(job);
+			submit_exec_queue(q, job);
+		}
 		job->restore_replay = false;
+	}
+
+	if (is_pt_job(job)) {
+		xe_pt_job_ops_put(job->pt_update[0].pt_job_ops);
+		dma_fence_put(job->fence);	/* Drop ref from xe_sched_job_arm */
+		return NULL;
 	}
 
 run_job_out:
