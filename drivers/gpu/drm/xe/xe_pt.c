@@ -734,7 +734,7 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
 		.wupd.entries = entries,
 		.clear_pt = clear_pt,
 	};
-	struct xe_pt *pt = vm->pt_root[tile->id];
+	struct xe_pt *pt = xe_vm_pt_root(vm, tile->id);
 	int ret;
 
 	if (range) {
@@ -895,6 +895,11 @@ static int xe_pt_zap_ptes_entry(struct xe_ptw *parent, pgoff_t offset,
 	return 0;
 }
 
+static bool pt_mirroring_disabled_for_tile(struct xe_vm *vm, u8 tile_id)
+{
+	return xe_vm_pt_root(vm, tile_id) != vm->pt_root[tile_id];
+}
+
 static const struct xe_pt_walk_ops xe_pt_zap_ptes_ops = {
 	.pt_entry = xe_pt_zap_ptes_entry,
 };
@@ -935,6 +940,9 @@ bool xe_pt_zap_ptes(struct xe_tile *tile, struct xe_vma *vma)
 
 	if (!(pt_mask & BIT(tile->id)))
 		return false;
+
+	if (pt_mirroring_disabled_for_tile(xe_vma_vm(vma), tile->id))
+		return true;
 
 	(void)xe_pt_walk_shared(&pt->base, pt->level, xe_vma_start(vma),
 				xe_vma_end(vma), &xe_walk.base);
@@ -987,6 +995,9 @@ bool xe_pt_zap_ptes_range(struct xe_tile *tile, struct xe_vm *vm,
 
 	if (!(pt_mask & BIT(tile->id)))
 		return false;
+
+	if (pt_mirroring_disabled_for_tile(vm, tile->id))
+		return true;
 
 	(void)xe_pt_walk_shared(&pt->base, pt->level, xe_svm_range_start(range),
 				xe_svm_range_end(range), &xe_walk.base);
@@ -1803,7 +1814,7 @@ static unsigned int xe_pt_stage_unbind(struct xe_tile *tile,
 		.wupd.entries = entries,
 		.prl = pt_update_op->prl,
 	};
-	struct xe_pt *pt = vm->pt_root[tile->id];
+	struct xe_pt *pt = xe_vm_pt_root(vm, tile->id);
 
 	(void)xe_pt_walk_shared(&pt->base, pt->level, start, end,
 				&xe_walk.base);
@@ -2341,8 +2352,19 @@ int xe_pt_update_ops_prepare(struct xe_device *xe, struct xe_vma_ops *vops)
 	int id, err;
 
 	for_each_tile(tile, xe, id) {
+		struct xe_vm_pgtable_update_ops *pt_update_ops =
+			&vops->pt_update_ops[id];
+
 		if (!vops->pt_update_ops[id].num_ops)
 			continue;
+
+		if (pt_mirroring_disabled_for_tile(vops->vm, id)) {
+			struct xe_page_reclaim_list *prl = &pt_update_ops->prl;
+
+			/* Transfer root PT update ops PRL to current */
+			*prl = vops->pt_update_ops[0].prl;
+			continue;
+		}
 
 		err = __xe_pt_update_ops_prepare(tile, vops);
 		if (err)
@@ -2635,6 +2657,12 @@ xe_pt_update_ops_run(struct xe_device *xe, struct xe_vma_ops *vops)
 		struct xe_vm_pgtable_update_ops *pt_update_ops =
 			&vops->pt_update_ops[j];
 
+		if (pt_mirroring_disabled_for_tile(vm, j)) {
+			xe_tile_assert(tile, !get_current_op(pt_update_ops));
+			tile_mask |= BIT(tile->id);
+			continue;
+		}
+
 		for (i = 0; i < get_current_op(pt_update_ops); ++i) {
 			struct xe_vm_pgtable_update_op *pt_op =
 				to_pt_op(pt_update_ops, i);
@@ -2724,6 +2752,9 @@ void xe_pt_update_ops_fini(struct xe_device *xe, struct xe_vma_ops *vops)
 		if (!pt_update_ops->num_ops)
 			continue;
 
+		if (pt_mirroring_disabled_for_tile(vops->vm, id))
+			continue;
+
 		xe_page_reclaim_entries_put(pt_update_ops->prl.entries);
 	}
 }
@@ -2747,6 +2778,9 @@ void xe_pt_update_ops_abort(struct xe_device *xe, struct xe_vma_ops *vops)
 		struct xe_vm_pgtable_update_ops *pt_update_ops =
 			&vops->pt_update_ops[id];
 		int i;
+
+		if (pt_mirroring_disabled_for_tile(vops->vm, id))
+			continue;
 
 		for (i = pt_update_ops->num_ops - 1; i >= 0; --i) {
 			struct xe_vm_pgtable_update_op *pt_op =
