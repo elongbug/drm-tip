@@ -443,6 +443,11 @@ static void xe_device_parse_modparam(struct xe_device *xe)
 	xe->info.ulls_enable = xe_modparam.ulls_enable;
 	xe->atomic_svm_timeslice_ms = 5;
 	xe->min_run_period_lr_ms = 5;
+	xe->info.num_pf_work = xe_modparam.num_pf_work;
+	if (xe->info.num_pf_work < 1)
+		xe->info.num_pf_work = 1;
+	else if (xe->info.num_pf_work > XE_PAGEFAULT_WORK_MAX)
+		xe->info.num_pf_work = XE_PAGEFAULT_WORK_MAX;
 }
 
 struct xe_device *xe_device_create(struct pci_dev *pdev,
