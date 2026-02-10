@@ -1568,6 +1568,9 @@ static void xe_ttm_bo_release_clear(struct ttm_buffer_object *ttm_bo)
 
 	xe_bo_assert_held(ttm_to_xe_bo(ttm_bo));
 
+	if (!xe->info.clear_on_free)
+		return;
+
 	if (ttm_bo->type != ttm_bo_type_device)
 		return;
 

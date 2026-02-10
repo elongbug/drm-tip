@@ -241,6 +241,8 @@ struct xe_device {
 		 * open
 		 */
 		u8 ulls_enable:1;
+		/** @info.clear_on_free: Enable VRAM clear on free */
+		u8 clear_on_free:1;
 	} info;
 
 	/** @wa_active: keep track of active workarounds */
