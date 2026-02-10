@@ -23,6 +23,7 @@
 struct xe_modparam xe_modparam = {
 	.probe_display =	XE_DEFAULT_PROBE_DISPLAY,
 	.ulls_enable =		XE_DEFAULT_ULLS_ENABLE,
+	.prefetch_invalidate_enable =	XE_DEFAULT_PREFETCH_INVALIDATE_ENABLE,
 	.guc_log_level =	XE_DEFAULT_GUC_LOG_LEVEL,
 	.force_probe =		XE_DEFAULT_FORCE_PROBE,
 #ifdef CONFIG_PCI_IOV
@@ -47,6 +48,9 @@ MODULE_PARM_DESC(probe_display, "Probe display HW, otherwise it's left untouched
 
 module_param_named(ulls_enable, xe_modparam.ulls_enable, bool, 0444);
 MODULE_PARM_DESC(ulls_enable, "Enable ULLS on migration queue if LR VM open (default: true)");
+
+module_param_named(prefetch_invalidate_enable, xe_modparam.prefetch_invalidate_enable, bool, 0444);
+MODULE_PARM_DESC(prefetch_invalidate_enable, "Prefetch invalidate enable (default: true)");
 
 module_param_named(vram_bar_size, xe_modparam.force_vram_bar_size, int, 0600);
 MODULE_PARM_DESC(vram_bar_size, "Set the vram bar size in MiB (<0=disable-resize, 0=max-needed-size, >0=force-size "

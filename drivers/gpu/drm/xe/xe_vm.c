@@ -7,6 +7,7 @@
 
 #include <linux/dma-fence-array.h>
 #include <linux/nospec.h>
+#include <linux/migrate.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_exec.h>
@@ -2392,6 +2393,8 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
 			}
 
 			xa_init_flags(&op->prefetch_range.range, XA_FLAGS_ALLOC);
+			op->prefetch_range.addr = addr;
+			op->prefetch_range.end = range_end;
 			op->prefetch_range.ranges_count = 0;
 
 			if (prefetch_region == DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC) {
@@ -3036,6 +3039,12 @@ static int prefetch_ranges(struct xe_vm *vm, struct xe_vma_ops *vops,
 
 	if (!xe_vma_is_cpu_addr_mirror(vma))
 		return 0;
+
+	if (vops->flags & XE_VMA_OPS_FLAG_HAS_SVM_VALID_RANGE &&
+	    op->prefetch_range.ranges_count > 1 &&
+	    vm->xe->info.prefetch_invalidate_enable)
+		migrate_device_prepare(op->prefetch_range.addr,
+				       op->prefetch_range.end, vm->xe);
 
 	ctx.read_only = xe_vma_read_only(vma);
 	ctx.devmem_possible = devmem_possible;

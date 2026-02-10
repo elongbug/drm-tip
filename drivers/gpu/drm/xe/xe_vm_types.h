@@ -441,6 +441,10 @@ struct xe_vma_op_unmap_range {
 struct xe_vma_op_prefetch_range {
 	/** @range: xarray for SVM ranges data */
 	struct xarray range;
+	/** @addr: Address of prefetch */
+	u64 addr;
+	/** @end: End address of prefetch */
+	u64 end;
 	/** @ranges_count: number of svm ranges to map */
 	u32 ranges_count;
 	/**

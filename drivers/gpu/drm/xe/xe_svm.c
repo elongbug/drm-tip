@@ -988,8 +988,7 @@ static bool xe_svm_range_is_valid(struct xe_svm_range *range,
  */
 void xe_svm_range_migrate_to_smem(struct xe_vm *vm, struct xe_svm_range *range)
 {
-	if (xe_svm_range_in_vram(range))
-		drm_gpusvm_range_evict(&vm->svm.gpusvm, &range->base);
+	drm_gpusvm_range_evict(&vm->svm.gpusvm, &range->base);
 }
 
 /**

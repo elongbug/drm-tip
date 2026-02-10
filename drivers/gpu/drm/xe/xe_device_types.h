@@ -233,6 +233,10 @@ struct xe_device {
 		/** @info.needs_shared_vf_gt_wq: needs shared GT WQ on VF */
 		u8 needs_shared_vf_gt_wq:1;
 		/**
+		 * @info.prefetch_invalidate_enable: Prefetch invalidate enable
+		 */
+		u8 prefetch_invalidate_enable:1;
+		/**
 		 * @info.ulls_enable: Enable ULLS on migration queue in LR VM
 		 * open
 		 */

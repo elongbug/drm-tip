@@ -441,6 +441,8 @@ static void xe_device_parse_modparam(struct xe_device *xe)
 {
 	xe->info.force_execlist = xe_modparam.force_execlist;
 	xe->info.ulls_enable = xe_modparam.ulls_enable;
+	xe->info.prefetch_invalidate_enable =
+		xe_modparam.prefetch_invalidate_enable;
 	xe->atomic_svm_timeslice_ms = 5;
 	xe->min_run_period_lr_ms = 5;
 	xe->info.num_pf_work = xe_modparam.num_pf_work;
