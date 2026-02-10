@@ -1489,3 +1489,26 @@ int migrate_device_coherent_folio(struct folio *folio)
 		return 0;
 	return -EBUSY;
 }
+
+/**
+ * migrate_device_prepare() - Prepare an address range for device page migration
+ * @start: Start address of the migration range
+ * @end: End address of the migration range
+ * @pgmap_owner: Page‑map owner associated with the migration
+ *
+ * Prepare an address range for migration, by triggering MMU notifier callbacks
+ * on the range. This is useful for drivers that need to migrate a large address
+ * range and want to coalesce the resulting TLB invalidations into a single
+ * operation for performance reasons.
+ */
+void migrate_device_prepare(unsigned long start, unsigned long end,
+			    void *pgmap_owner)
+{
+	struct mmu_notifier_range range;
+
+	mmu_notifier_range_init_owner(&range, MMU_NOTIFY_MIGRATE, 0,
+				      current->mm, start, end, pgmap_owner);
+	mmu_notifier_invalidate_range_start(&range);
+	mmu_notifier_invalidate_range_end(&range);
+}
+EXPORT_SYMBOL(migrate_device_prepare);

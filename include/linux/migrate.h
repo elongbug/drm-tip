@@ -192,6 +192,8 @@ void migrate_device_pages(unsigned long *src_pfns, unsigned long *dst_pfns,
 			unsigned long npages);
 void migrate_device_finalize(unsigned long *src_pfns,
 			unsigned long *dst_pfns, unsigned long npages);
+void migrate_device_prepare(unsigned long start, unsigned long end,
+			    void *pgmap_owner);
 
 #endif /* CONFIG_MIGRATION */
 
