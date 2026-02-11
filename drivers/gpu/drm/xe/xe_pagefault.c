@@ -367,6 +367,7 @@ xe_pagefault_queue_requeue(struct xe_pagefault_queue *pf_queue,
 					    usm.pf_queue);
 	struct xe_pagefault *next = pf->consumer.next, *lpf;
 
+	xe_gt_stats_incr(gt, XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT, 1);
 	xe_assert(xe, pf->consumer.alloc_state ==
 		  XE_PAGEFAULT_ALLOC_STATE_CHAINED);
 
@@ -425,6 +426,10 @@ static bool xe_pagefault_cache_hit(struct xe_pagefault_queue *pf_queue,
 		if (xe_pagefault_cache_match(pf, start, end, asid)) {
 			xe_assert(xe, pf_work->cache.pf->consumer.alloc_state ==
 				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+
+			xe_gt_stats_incr(pf->gt,
+					 XE_GT_STATS_ID_CHAIN_PAGEFAULT_COUNT,
+					 1);
 
 			pf->consumer.alloc_state =
 				XE_PAGEFAULT_ALLOC_STATE_CHAINED;
@@ -560,8 +565,10 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 
 		/* Last fault same address, ack immediately */
 		if (xe_pagefault_cache_match(pf, cache_start, cache_end,
-					     cache_asid))
+					     cache_asid)) {
+			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
 			goto ack_fault;
+		}
 
 		err = xe_pagefault_service(pf);
 
@@ -811,8 +818,15 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
 		lpf->consumer.next = NULL;
 
 		if (xe_pagefault_cache_hit(pf_queue, lpf)) {
-			if (empty)
+			xe_gt_stats_incr(pf->gt,
+					 XE_GT_STATS_ID_CHAIN_IRQ_PAGEFAULT_COUNT,
+					 1);
+			if (empty) {
 				xe_pagefault_queue_advance(pf_queue);
+				xe_gt_stats_incr(pf->gt,
+						 XE_GT_STATS_ID_CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT,
+						 1);
+			}
 		} else {
 			int work_index = xe_pagefault_work_index(xe);
 
