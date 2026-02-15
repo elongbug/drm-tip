@@ -277,6 +277,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 	struct xe_pagefault_work *pf_work =
 		container_of(w, typeof(*pf_work), work);
 	struct xe_device *xe = pf_work->xe;
+	ktime_t start = xe_gt_stats_ktime_get();
 	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
 	struct xe_pagefault pf;
 	unsigned long threshold;
@@ -309,6 +310,9 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		}
 	}
 #undef USM_QUEUE_MAX_RUNTIME_MS
+
+	xe_gt_stats_incr(xe_root_mmio_gt(xe), XE_GT_STATS_ID_PAGEFAULT_US,
+			 xe_gt_stats_ktime_us_delta(start));
 }
 
 static int xe_pagefault_queue_init(struct xe_device *xe,
