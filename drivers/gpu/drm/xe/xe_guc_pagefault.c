@@ -9,6 +9,19 @@
 #include "xe_guc_pagefault.h"
 #include "xe_pagefault.h"
 
+#define XE_GUC_PAGEFAULT_FLUSH_PERIOD	BIT(4)	/* Sixteen */
+
+static void guc_ack_fault_begin(void *private)
+{
+	struct xe_guc *guc = private;
+
+	xe_guc_ct_lock(&guc->ct);
+
+	/* Ack the 2th, then 18th, etc... */
+	guc->pagefault_ack_counter =
+		XE_GUC_PAGEFAULT_FLUSH_PERIOD - 2;
+}
+
 static void guc_ack_fault(struct xe_pagefault *pf, int err)
 {
 	u32 vfid = FIELD_GET(PFD_VFID, pf->producer.msg[2]);
@@ -33,12 +46,25 @@ static void guc_ack_fault(struct xe_pagefault *pf, int err)
 		FIELD_PREP(PFR_PDATA, pdata),
 	};
 	struct xe_guc *guc = pf->producer.private;
+	bool write_only = guc->pagefault_ack_counter++ &
+		(XE_GUC_PAGEFAULT_FLUSH_PERIOD - 1);
 
-	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
+	xe_guc_ct_send_locked(&guc->ct, action, ARRAY_SIZE(action),
+			      write_only);
+}
+
+static void guc_ack_fault_end(void *private)
+{
+	struct xe_guc *guc = private;
+
+	xe_guc_ct_send_flush(&guc->ct);
+	xe_guc_ct_unlock(&guc->ct);
 }
 
 static const struct xe_pagefault_ops guc_pagefault_ops = {
+	.ack_fault_begin = guc_ack_fault_begin,
 	.ack_fault = guc_ack_fault,
+	.ack_fault_end = guc_ack_fault_end,
 };
 
 /**
