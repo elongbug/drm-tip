@@ -1023,8 +1023,15 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
 	/* Update descriptor */
 	desc_write(xe, h2g, tail, h2g->info.tail);
 
-	trace_xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1), full_len,
-			     desc_read(xe, h2g, head), h2g->info.tail);
+	/*
+	 * desc_read() performs an MMIO read which serializes the CPU and drains
+	 * posted writes on dGPU platforms. Tracepoints evaluate arguments even
+	 * when disabled, so guard the event to avoid adding µs-scale latency to
+	 * the fast H2G submission path when tracing is not active.
+	 */
+	if (trace_xe_guc_ctb_h2g_enabled())
+		trace_xe_guc_ctb_h2g(xe, gt->info.id, *(action - 1), full_len,
+				     desc_read(xe, h2g, head), h2g->info.tail);
 
 	return 0;
 
